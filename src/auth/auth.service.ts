@@ -94,7 +94,19 @@ export class AuthService {
   }
 
   async createToken(userId: string, email: string) {
-    const payload = { email, id: userId };
+    const user = await this.prismaService.user.update({
+      where: { id: userId },
+      data: {
+        acessTokenLastSerial: {
+          increment: 1,
+        },
+      },
+    });
+    const payload = {
+      email,
+      id: userId,
+      issueNumber: user.acessTokenLastSerial,
+    };
     return 'Bearer ' + this.jwtService.sign(payload);
   }
 

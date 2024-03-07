@@ -49,6 +49,13 @@ export class AuthController {
     res.send({ acessToken: tokens.accessToken });
   }
 
+  @Get('exit')
+  async ExitFromAccount(@Res() res: Response, @Req() request: Request, @CurrentUser() jwtPayload: JwtPayload) {
+    await this.authService.RefreshTokens(request.cookies['refreshToken']);
+    res.clearCookie('refreshToken')
+    res.send("OK")
+  }
+
   @Get()
   async Test(@CurrentUser() jwtPayload: JwtPayload) {
     return jwtPayload;

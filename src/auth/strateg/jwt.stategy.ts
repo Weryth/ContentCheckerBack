@@ -23,7 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         return null;
     });
     
-    if (!user) {
+    if (!user || user.acessTokenLastSerial != payload.issueNumber) {
         throw new UnauthorizedException();
     }
     return payload;
