@@ -7,7 +7,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { JwtStrategy } from 'src/strateg/jwt.stategy';
+import { JwtStrategy } from 'src/auth/strateg/jwt.stategy';
 
 @Module({
   imports: [

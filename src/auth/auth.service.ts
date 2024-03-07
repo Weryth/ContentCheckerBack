@@ -1,10 +1,18 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { env } from 'process';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthUserDTO } from './dto/reg.data.dto';
 import { UsersService } from 'src/users/users.service';
 import { JwtService } from '@nestjs/jwt';
+import { randomBytes } from 'crypto';
+import { Response } from 'express';
+import { JwtPayload } from 'src/interfaces/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {
@@ -37,10 +45,42 @@ export class AuthService {
 
   async UserLoginService(data: AuthUserDTO) {
     const user = await this.userService.findOne(data.email);
-    if (user && await this.decryptUserPsswordService(data.password, user.password)) {
-      return this.createToken(user.id, user.email)
+    if (
+      user &&
+      (await this.decryptUserPsswordService(data.password, user.password))
+    ) {
+      const refreshToken = await this.setRefreshToken(user.id);
+
+      const accessToken = await this.createToken(user.id, user.email);
+
+      return { accessToken: accessToken, refreshToken: refreshToken };
     } else {
-      throw new HttpException('user is not exist or pass is not correct', HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        'user is not exist or pass is not correct',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+  }
+
+  async RefreshTokens(refreshToken: string) {
+    try {
+      const token = await this.prismaService.refreshToken.findFirst({
+        where: { token: refreshToken },
+      });
+
+      if (!token && !(new Date(token.expDate) < new Date())) {
+        throw new UnauthorizedException();
+      }
+      const newRefreshToken = await this.setRefreshToken(token.userId);
+      const user = await this.prismaService.user.findFirst({
+        where: { id: token.userId },
+      });
+
+      const newAccessToken = await this.createToken(token.userId, user.email);
+
+      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.CONFLICT);
     }
   }
 
@@ -55,8 +95,57 @@ export class AuthService {
 
   async createToken(userId: string, email: string) {
     const payload = { email, id: userId };
-    return {
-      access_token: this.jwtService.sign(payload),
-    };
+    return 'Bearer ' + this.jwtService.sign(payload);
+  }
+
+  async setRefreshToken(userId: string) {
+    try {
+      const existToken = await this.findRefreshToken(userId);
+
+      const tokenExpDays = parseInt(process.env.REFRESH_TOKEN_EXP);
+      const tokenExp = new Date();
+      tokenExp.setDate(tokenExp.getDate() + tokenExpDays);
+
+      const newToken = await this.generateRefreshToken(40);
+
+      let dbToken;
+      if (existToken) {
+        dbToken = await this.prismaService.refreshToken.update({
+          where: { id: existToken.id },
+          data: {
+            token: newToken,
+            expDate: tokenExp,
+          },
+        });
+      } else {
+        dbToken = await this.prismaService.refreshToken.create({
+          data: {
+            token: newToken,
+            expDate: tokenExp,
+            userId: userId,
+          },
+        });
+      }
+      return dbToken.token;
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.CONFLICT);
+    }
+  }
+
+  async findRefreshToken(userId: string) {
+    return await this.prismaService.refreshToken.findFirst({
+      where: { userId: userId },
+      include: { user: true },
+    });
+  }
+
+  async generateRefreshToken(length: number) {
+    const bytes = Math.ceil((length * 3) / 4);
+    const token = randomBytes(bytes).toString('base64');
+    return token
+      .substring(0, length)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
   }
 }

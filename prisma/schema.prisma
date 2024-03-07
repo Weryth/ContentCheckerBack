@@ -23,7 +23,7 @@ model RefreshToken {
   id        String   @id @default(uuid())
   updatedAt DateTime @updatedAt @map("updated-at")
   createdAt DateTime @default(now()) @map("created-at")
-  toket     String   @unique
+  token     String   @unique
   expDate   DateTime
   user      User     @relation(fields: [userId], references: [id])
   userId    String   @map("user-id")
