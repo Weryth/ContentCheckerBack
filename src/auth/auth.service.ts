@@ -4,13 +4,15 @@ import { env } from 'process';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthUserDTO } from './dto/reg.data.dto';
 import { UsersService } from 'src/users/users.service';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly userService: UsersService
-    ) {}
+    private readonly userService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async RegisterNewUserService(regData: AuthUserDTO) {
     const hashedPass = await this.cryptUserPasswordService(regData.password);
@@ -33,12 +35,12 @@ export class AuthService {
     }
   }
 
-  async UserLoginService(data: AuthUserDTO){
-    const user = await this.userService.findOne(data.email)
-    if (user) {
-        return await this.decryptUserPsswordService(data.password, user.password)
+  async UserLoginService(data: AuthUserDTO) {
+    const user = await this.userService.findOne(data.email);
+    if (user && await this.decryptUserPsswordService(data.password, user.password)) {
+      return this.createToken(user.id, user.email)
     } else {
-        throw new HttpException('user is not exist', HttpStatus.NOT_FOUND)
+      throw new HttpException('user is not exist or pass is not correct', HttpStatus.NOT_FOUND);
     }
   }
 
@@ -49,5 +51,12 @@ export class AuthService {
 
   async decryptUserPsswordService(pass: string, hash: string) {
     return bcrypt.compareSync(pass, hash);
+  }
+
+  async createToken(userId: string, email: string) {
+    const payload = { email, id: userId };
+    return {
+      access_token: this.jwtService.sign(payload),
+    };
   }
 }
